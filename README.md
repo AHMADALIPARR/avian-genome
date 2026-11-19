@@ -39,7 +39,6 @@ AVIAN-MORPH has a front end. It is a Muse space, slug `avian-morph-genome`, and 
 
 The hero visualization draws the genome the way the data defines it. Four genome points are plotted from the geometry fixture, and selecting a point shows its input-to-output mapping. The retina feeds the retinal ganglion cell, neuron A. Neuron A drives the tectal neuron, neuron B, through the controlled-NOT coupling. The synapse is the retinal-to-tectal projection between them. The quantum circuit loop sits over the optic tectum and carries the CNOT mark that couples the two neurons.
 
-![The front end in the Bright stimulus state: both neurons spiking, the pathway lit](docs/images/frontend_bright.png)
 
 *The Bright stimulus state. The stimulus angle is pi, neuron A spikes at 1.0, neuron B spikes at 1.0, and the pathway between them is lit. The same page in the Dark state shows both neurons silent at 0.0, and in the Dim state both graded at 0.5.*
 
