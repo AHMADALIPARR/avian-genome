@@ -1,0 +1,79 @@
+// reduce_segments.comp — AVIAN-MORPH Vulkan compute shader (segmented sum).
+//
+// Mirrors the C11 kernel avian_reduce_segments_f32 in
+// src/c11/avian_reduce.c:
+//   output[s] = sum of input[off[s] .. off[s]+len[s]-1],
+//   for s in [0, nseg), accumulated left to right in f32 from +0.0f.
+//   An empty segment (length 0) sums to +0.0f.
+//
+// Contract (same as the C kernel; see src/c11/CONTRACT_reduce.md):
+//   - The host validates before dispatch, using the same checks as
+//     the C kernel: buffers are non-NULL and non-overlapping,
+//     output holds one sum per segment, every segment length is
+//     non-negative, the total of the lengths equals the input
+//     count, every input element is finite, and every accumulation
+//     is finite. The shader performs the arithmetic only; it does
+//     not re-validate. A dispatch on unvalidated buffers is a host
+//     error, not a shader error.
+//   - The host computes the exclusive prefix sum of the lengths
+//     and uploads it as the offsets buffer. The shader assumes
+//     offsets[s] is the start of segment s and
+//     offsets[s] + lengths[s] <= input count. The host validates
+//     all of this before dispatch.
+//   - One invocation per segment. Each invocation accumulates its
+//     segment left to right from +0.0f, in a single correctly-
+//     rounded IEEE 754 addition per element. There is no
+//     cross-segment accumulation. Deterministic: the same inputs
+//     give the same outputs.
+//   - nseg == 0 is valid. The host dispatches zero workgroups and
+//     writes nothing.
+//
+// Binding layout (set 0):
+//   binding 0 — readonly input buffer (float data[])
+//   binding 1 — readonly lengths buffer (int data[])
+//   binding 2 — readonly offsets buffer (uint data[])
+//   binding 3 — output buffer (float data[])
+//   push constant — nseg (uint)
+//
+// This shader is compiled to SPIR-V and validated with spirv-val.
+// It is NOT executed here: there is no GPU on this machine, so the
+// CPU-vs-GPU conformance comparison is UNVERIFIED (see
+// CONTRACT_reduce.md).
+
+#version 450
+
+layout(local_size_x = 256) in;
+
+layout(set = 0, binding = 0) readonly buffer InputBuffer {
+    float data[];
+} input_buf;
+
+layout(set = 0, binding = 1) readonly buffer LengthsBuffer {
+    int data[];
+} lengths_buf;
+
+layout(set = 0, binding = 2) readonly buffer OffsetsBuffer {
+    uint data[];
+} offsets_buf;
+
+layout(set = 0, binding = 3) buffer OutputBuffer {
+    float data[];
+} output_buf;
+
+layout(push_constant) uniform PushConstants {
+    uint nseg;
+} pc;
+
+void main() {
+    uint s = gl_GlobalInvocationID.x;
+    if (s >= pc.nseg) {
+        return;
+    }
+    uint len = uint(lengths_buf.data[s]);
+    uint off = offsets_buf.data[s];
+    float acc = 0.0;
+    for (uint j = 0u; j < len; j++) {
+        acc = acc + input_buf.data[off + j];
+    }
+    output_buf.data[s] = acc;
+}

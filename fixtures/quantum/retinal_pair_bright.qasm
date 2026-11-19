@@ -1,0 +1,16 @@
+OPENQASM 3.0;
+include "stdgates.inc";
+qubit[6] circuit;
+bit spikeA;
+bit spikeB;
+ry(3.141592653589793) circuit[0];
+rz(0.0) circuit[1];
+cx circuit[0], circuit[1];
+cx circuit[1], circuit[2];
+cx circuit[2], circuit[3];
+ry(0.0) circuit[3];
+rz(0.0) circuit[4];
+cx circuit[3], circuit[4];
+cx circuit[4], circuit[5];
+spikeA = measure circuit[2];
+spikeB = measure circuit[5];

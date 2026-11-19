@@ -1,0 +1,67 @@
+// conv1d_f32.comp — AVIAN-MORPH Vulkan compute shader (f32 1D convolution).
+//
+// Mirrors the C11 kernel avian_conv1d_f32 in src/c11/avian_conv1d.c:
+//   output[i] = k0*input[i-1] + k1*input[i] + k2*input[i+1],
+//   for i in [0, count), with zero padding at the edges.
+//   Out-of-range inputs (i-1 < 0 or i+1 >= count) read as 0.
+//   Output length equals input length.
+//
+// Contract (same as the C kernel; see src/c11/CONTRACT_conv1d.md):
+//   - The host validates before dispatch, using the same checks as
+//     the C kernel: buffers are non-NULL and non-overlapping, output
+//     holds at least count elements, all three kernel coefficients
+//     and every input element are finite, and every accumulation is
+//     finite. The shader performs the arithmetic only; it does not
+//     re-validate. A dispatch on unvalidated buffers is a host
+//     error, not a shader error.
+//   - Each tap is a fused multiply-add (fma), accumulated left to
+//     right in the fixed order k0, then k1, then k2, matching the
+//     C kernel. Each invocation computes exactly one output element
+//     from its 3-tap neighbourhood. There is no cross-element
+//     reduction beyond the 3-tap window. Deterministic: the same
+//     inputs give the same outputs.
+//   - count == 0 is valid. The host dispatches zero workgroups and
+//     writes nothing.
+//
+// Binding layout (set 0):
+//   binding 0 — readonly input buffer (float data[])
+//   binding 1 — output buffer (float data[])
+//   push constant — k0, k1, k2 (float), count (uint)
+//
+// This shader is compiled to SPIR-V and validated with spirv-val.
+// It is NOT executed here: there is no GPU on this machine, so the
+// CPU-vs-GPU conformance comparison is UNVERIFIED (see
+// CONTRACT_conv1d.md).
+
+#version 450
+
+layout(local_size_x = 256) in;
+
+layout(set = 0, binding = 0) readonly buffer InputBuffer {
+    float data[];
+} input_buf;
+
+layout(set = 0, binding = 1) buffer OutputBuffer {
+    float data[];
+} output_buf;
+
+layout(push_constant) uniform PushConstants {
+    float k0;
+    float k1;
+    float k2;
+    uint  count;
+} pc;
+
+void main() {
+    uint i = gl_GlobalInvocationID.x;
+    if (i >= pc.count) {
+        return;
+    }
+    float xm = (i == 0) ? 0.0 : input_buf.data[i - 1];
+    float x0 = input_buf.data[i];
+    float xp = (i + 1 == pc.count) ? 0.0 : input_buf.data[i + 1];
+    float acc = fma(pc.k0, xm, 0.0);
+    acc = fma(pc.k1, x0, acc);
+    acc = fma(pc.k2, xp, acc);
+    output_buf.data[i] = acc;
+}

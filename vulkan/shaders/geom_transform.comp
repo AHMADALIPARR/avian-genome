@@ -1,0 +1,83 @@
+// geom_transform.comp — AVIAN-MORPH Vulkan compute shader (3D affine
+// coordinate transform, geometry).
+//
+// Mirrors the C11 kernel avian_geom_transform_f32 in src/c11/avian_geom.c:
+//   out[3i+r] = M[3r+0]*in[3i+0] + M[3r+1]*in[3i+1]
+//             + M[3r+2]*in[3i+2] + t[r],
+//   for each point i in [0, n) and each row r in 0..2.
+//   The matrix M is 9 f32, row-major. The translation t is 3 f32.
+//   The input is N points, each 3 f32 (x, y, z), stored flat.
+//   The output is N points, each 3 f32, stored flat.
+//
+// Contract (same as the C kernel; see src/c11/CONTRACT_geom.md):
+//   - The host validates before dispatch, using the same checks as
+//     the C kernel: buffers are non-NULL and non-overlapping,
+//     output and input each hold at least 3*n values, the matrix
+//     holds at least 9 values, the translation holds at least 3
+//     values, and every input coordinate, every matrix entry,
+//     every translation entry, and every accumulation is finite.
+//     The shader performs the arithmetic only; it does not
+//     re-validate. A dispatch on unvalidated buffers is a host
+//     error, not a shader error.
+//   - Each output component is a fused multiply-add (fma),
+//     accumulated left to right in the fixed order M row term by
+//     term, then the translation, matching the C kernel. Each
+//     invocation computes exactly one point (its 3 output
+//     coordinates) from its 3 input coordinates, the matrix, and
+//     the translation. There is no cross-point reduction.
+//     Deterministic: the same inputs give the same outputs.
+//   - n == 0 is valid. The host dispatches zero workgroups and
+//     writes nothing.
+//
+// Binding layout (set 0):
+//   binding 0 — readonly input buffer (float data[], 3N values)
+//   binding 1 — readonly matrix buffer (float data[], 9 values)
+//   binding 2 — readonly translation buffer (float data[], 3 values)
+//   binding 3 — output buffer (float data[], 3N values)
+//   push constant — n (uint, point count)
+//
+// This shader is compiled to SPIR-V and validated with spirv-val.
+// It is NOT executed here: there is no GPU on this machine, so the
+// CPU-vs-GPU conformance comparison is UNVERIFIED (see
+// CONTRACT_geom.md).
+
+#version 450
+
+layout(local_size_x = 256) in;
+
+layout(set = 0, binding = 0) readonly buffer InputBuffer {
+    float data[];
+} input_buf;
+
+layout(set = 0, binding = 1) readonly buffer MatrixBuffer {
+    float data[];
+} matrix_buf;
+
+layout(set = 0, binding = 2) readonly buffer TranslationBuffer {
+    float data[];
+} translation_buf;
+
+layout(set = 0, binding = 3) buffer OutputBuffer {
+    float data[];
+} output_buf;
+
+layout(push_constant) uniform PushConstants {
+    uint n;
+} pc;
+
+void main() {
+    uint i = gl_GlobalInvocationID.x;
+    if (i >= pc.n) {
+        return;
+    }
+    float x = input_buf.data[3u * i + 0u];
+    float y = input_buf.data[3u * i + 1u];
+    float z = input_buf.data[3u * i + 2u];
+    for (uint r = 0u; r < 3u; r++) {
+        float acc = fma(matrix_buf.data[3u * r + 0u], x, 0.0);
+        acc = fma(matrix_buf.data[3u * r + 1u], y, acc);
+        acc = fma(matrix_buf.data[3u * r + 2u], z, acc);
+        acc = fma(1.0, translation_buf.data[r], acc);
+        output_buf.data[3u * i + r] = acc;
+    }
+}

@@ -1,0 +1,119 @@
+// gather_scatter.comp — AVIAN-MORPH Vulkan compute shader (sparse
+// gather/scatter, synaptic_sparse).
+//
+// Mirrors the C11 kernels avian_gather_f32 and avian_scatter_f32 in
+// src/c11/avian_gather.c. One shader file implements both operations,
+// selected by the mode push constant (0 = gather, 1 = scatter).
+//
+// Gather:
+//   output[i] = input[index[i]], for i in [0, index count).
+//   One invocation per output element. Output length equals index
+//   count. Each index must be a non-negative integer less than the
+//   input count.
+//
+// Scatter:
+//   output[index[i]] = input[i], for i in [0, input count),
+//   with output starting as all +0.0f. If two input elements target
+//   the same index, the LAST one in input order wins. An index that
+//   is never written stays +0.0f.
+//   One invocation per output element. For output element j, the
+//   invocation scans all input elements in order and keeps the
+//   value of the last input whose index equals j (or +0.0f when no
+//   input targets j). The scan is O(input count) per output element,
+//   so the scatter dispatch is O(output count * input count) work.
+//   That cost is the price of a deterministic last-wins rule without
+//   a race: a parallel scatter that lets one invocation per input
+//   element write its output index would race when two inputs target
+//   the same index, and an atomic write would pick an unspecified
+//   winner, not the last one in input order. The scan is race-free
+//   (each invocation writes only its own output element) and
+//   deterministic (the scan order is the input order). The host is
+//   expected to use the scatter shader only for small index sets;
+//   large scatters belong on the C kernel or on a sorted scatter.
+//   This cost is documented, not hidden.
+//
+// Contract (same as the C kernels; see src/c11/CONTRACT_gather.md):
+//   - The host validates before dispatch, using the same checks as
+//     the C kernels: buffers are non-NULL and non-overlapping,
+//     output holds one value per index (gather) or the caller-given
+//     output count (scatter), every index is in range, and every
+//     input element is finite. For scatter the host also checks
+//     that the index count equals the input count. The shader
+//     performs the arithmetic only; it does not re-validate. A
+//     dispatch on unvalidated buffers is a host error, not a
+//     shader error.
+//   - Gather and scatter copy values only. There is no arithmetic,
+//     so there is no rounding and no overflow. A copied value is
+//     bit-identical to the input value it copies, including the
+//     sign of zero. The scatter zero fill writes +0.0f.
+//   - Deterministic: the same inputs give the same outputs.
+//   - An empty dispatch is valid. For gather with index count 0,
+//     and for scatter with input count 0 and output count 0, the
+//     host dispatches zero workgroups and writes nothing. For
+//     scatter with input count 0 and output count > 0, the shader
+//     writes +0.0f to every output element (the scan finds no
+//     input targeting any index).
+//
+// Binding layout (set 0):
+//   binding 0 — readonly input buffer (float data[])
+//   binding 1 — readonly index buffer (int data[])
+//   binding 2 — output buffer (float data[])
+//   push constant — mode (uint, 0 = gather, 1 = scatter),
+//                   in_count (uint), idx_count (uint),
+//                   out_count (uint)
+//
+// This shader is compiled to SPIR-V and validated with spirv-val.
+// It is NOT executed here: there is no GPU on this machine, so the
+// CPU-vs-GPU conformance comparison is UNVERIFIED (see
+// CONTRACT_gather.md).
+
+#version 450
+
+layout(local_size_x = 256) in;
+
+layout(set = 0, binding = 0) readonly buffer InputBuffer {
+    float data[];
+} input_buf;
+
+layout(set = 0, binding = 1) readonly buffer IndexBuffer {
+    int data[];
+} index_buf;
+
+layout(set = 0, binding = 2) buffer OutputBuffer {
+    float data[];
+} output_buf;
+
+layout(push_constant) uniform PushConstants {
+    uint mode;
+    uint in_count;
+    uint idx_count;
+    uint out_count;
+} pc;
+
+void main() {
+    uint j = gl_GlobalInvocationID.x;
+    if (pc.mode == 0u) {
+        /* Gather: one invocation per output element (per index). */
+        if (j >= pc.idx_count) {
+            return;
+        }
+        output_buf.data[j] = input_buf.data[index_buf.data[j]];
+    } else {
+        /* Scatter: one invocation per output element. Scan all
+         * inputs in order, keeping the value of the last input
+         * whose index equals j. If none targets j, acc stays
+         * +0.0f. The scan order is the input order, so the last
+         * writer wins, and each invocation writes only its own
+         * output element, so there is no race. */
+        if (j >= pc.out_count) {
+            return;
+        }
+        float acc = 0.0;
+        for (uint i = 0u; i < pc.in_count; i++) {
+            if (index_buf.data[i] == int(j)) {
+                acc = input_buf.data[i];
+            }
+        }
+        output_buf.data[j] = acc;
+    }
+}

@@ -1,0 +1,81 @@
+// complex_rotate.comp — AVIAN-MORPH Vulkan compute shader (complex
+// rotation, quantum-layer rotation).
+//
+// Mirrors the C11 kernel avian_complex_rotate_f32 in src/c11/avian_complex.c:
+//   out_re[i] = in_re[i]*rot_re - in_im[i]*rot_im
+//   out_im[i] = in_re[i]*rot_im + in_im[i]*rot_re
+//   for each complex number i in [0, n).
+//   The input is N complex numbers, stored flat as 2N f32 values
+//   in interleaved order (re0, im0, re1, im1, ...). The output is
+//   N complex numbers, stored flat the same way.
+//   The rotation is a single complex number rot = (rot_re, rot_im),
+//   given directly, not as an angle. The caller forms the rotation;
+//   the kernel only multiplies.
+//
+// Contract (same as the C kernel; see src/c11/CONTRACT_complex.md):
+//   - The host validates before dispatch, using the same checks as
+//     the C kernel: buffers are non-NULL and non-overlapping,
+//     output and input each hold at least 2*n values, both
+//     rotation components are finite, and every input component
+//     and every accumulation is finite. The shader performs the
+//     arithmetic only; it does not re-validate. A dispatch on
+//     unvalidated buffers is a host error, not a shader error.
+//   - Each output component is a fused multiply-add (fma), in the
+//     fixed order of the C kernel: the inner product first, then
+//     the outer fma of the other product plus that inner product.
+//     out_re = fma(in_re, rot_re, fma(-in_im, rot_im, 0.0));
+//     out_im = fma(in_re, rot_im, fma(in_im, rot_re, 0.0));
+//     GLSL fma() maps to the same fused operation as C fmaf()
+//     (OpExtInst Fma in SPIR-V), so the shader's arithmetic
+//     matches the C kernel's bit for bit on exact values, and
+//     matches the C kernel's two-step rounding on inexact values
+//     (see src/c11/CONTRACT_complex.md for the 1-ULP note: the
+//     shader, like the C kernel, rounds the inner product first,
+//     while the CBQN reference keeps the exact inner product).
+//     Each invocation computes exactly one complex number (its 2
+//     output components) from its 2 input components and the
+//     rotation. There is no cross-element reduction.
+//     Deterministic: the same inputs give the same outputs.
+//   - n == 0 is valid. The host dispatches zero workgroups and
+//     writes nothing.
+//
+// Binding layout (set 0):
+//   binding 0 — readonly input buffer (float data[], 2N values)
+//   binding 1 — output buffer (float data[], 2N values)
+//   push constant — rot_re, rot_im (float), n (uint, complex count)
+//
+// This shader is compiled to SPIR-V and validated with spirv-val.
+// It is NOT executed here: there is no GPU on this machine, so the
+// CPU-vs-GPU conformance comparison is UNVERIFIED (see
+// CONTRACT_complex.md).
+
+#version 450
+
+layout(local_size_x = 256) in;
+
+layout(set = 0, binding = 0) readonly buffer InputBuffer {
+    float data[];
+} input_buf;
+
+layout(set = 0, binding = 1) buffer OutputBuffer {
+    float data[];
+} output_buf;
+
+layout(push_constant) uniform PushConstants {
+    float rot_re;
+    float rot_im;
+    uint  n;
+} pc;
+
+void main() {
+    uint i = gl_GlobalInvocationID.x;
+    if (i >= pc.n) {
+        return;
+    }
+    float re = input_buf.data[2u * i + 0u];
+    float im = input_buf.data[2u * i + 1u];
+    float out_re = fma(re, pc.rot_re, fma(-im, pc.rot_im, 0.0));
+    float out_im = fma(re, pc.rot_im, fma(im, pc.rot_re, 0.0));
+    output_buf.data[2u * i + 0u] = out_re;
+    output_buf.data[2u * i + 1u] = out_im;
+}

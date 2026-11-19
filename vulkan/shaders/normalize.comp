@@ -1,0 +1,82 @@
+// normalize.comp — AVIAN-MORPH Vulkan compute shader (L2 normalization).
+//
+// Mirrors the C11 kernel avian_normalize_f32 in src/c11/avian_norm.c:
+//   out[i] = in[i] / norm,  norm = sqrt(sum of in[i]^2),
+//   for i in [0, n). The input is N f32 values. The output is
+//   N f32 values. The caller passes n, the element count.
+//
+// Design decision (honest, documented): this shader performs the
+// DIVISION step only. The norm comes from a push constant, computed
+// by the host. The host computes the norm with the same fmaf
+// accumulation order as the C kernel (left to right from +0.0f,
+// then sqrtf) and passes the validated norm in. Rationale:
+//   - The norm is a reduction over the whole vector. A
+//     single-workgroup shared-memory reduction caps the vector at
+//     the workgroup size unless strided, and a strided tree
+//     reduction accumulates in a different order than the C
+//     kernel's strict left-to-right fmaf chain, so the shader's
+//     norm would differ from the C kernel's norm by rounding.
+//   - The host already computes the sum of squares to validate
+//     the preconditions (the norm must be finite and nonzero
+//     before dispatch), so passing that validated norm in is
+//     exact and keeps the shader's division identical to the C
+//     kernel's division step.
+//   - The shader therefore does NOT recompute the norm. A
+//     dispatch with an unvalidated norm (zero, infinite, NaN,
+//     or computed in a different accumulation order) is a host
+//     error, not a shader error.
+//
+// Contract (same as the C kernel; see src/c11/CONTRACT_norm.md):
+//   - The host validates before dispatch, using the same checks as
+//     the C kernel: buffers are non-NULL and non-overlapping,
+//     output and input each hold at least n values, every input
+//     element is finite, the sum of squares is finite, and the
+//     norm is finite and nonzero. The shader performs the
+//     arithmetic only; it does not re-validate.
+//   - Each invocation computes exactly one output element: one
+//     correctly-rounded f32 division, out[i] = in[i] / norm.
+//     There is no cross-element reduction in the shader.
+//     Deterministic: the same inputs give the same outputs.
+//   - The division cannot overflow: every |in[i]| is at most the
+//     norm, so every |out[i]| is at most 1.
+//   - A zero input component divided by the (positive) norm keeps
+//     its sign (+0.0f / norm is +0.0f, -0.0f / norm is -0.0f),
+//     the same IEEE division sign rule as the C kernel.
+//   - n == 0 is valid. The host dispatches zero workgroups and
+//     writes nothing.
+//
+// Binding layout (set 0):
+//   binding 0 — readonly input buffer (float data[], N values)
+//   binding 1 — output buffer (float data[], N values)
+//   push constant — norm (float, host-computed, validated),
+//                   n (uint, element count)
+//
+// This shader is compiled to SPIR-V and validated with spirv-val.
+// It is NOT executed here: there is no GPU on this machine, so the
+// CPU-vs-GPU conformance comparison is UNVERIFIED (see
+// CONTRACT_norm.md).
+
+#version 450
+
+layout(local_size_x = 256) in;
+
+layout(set = 0, binding = 0) readonly buffer InputBuffer {
+    float data[];
+} input_buf;
+
+layout(set = 0, binding = 1) buffer OutputBuffer {
+    float data[];
+} output_buf;
+
+layout(push_constant) uniform PushConstants {
+    float norm;
+    uint  n;
+} pc;
+
+void main() {
+    uint i = gl_GlobalInvocationID.x;
+    if (i >= pc.n) {
+        return;
+    }
+    output_buf.data[i] = input_buf.data[i] / pc.norm;
+}
