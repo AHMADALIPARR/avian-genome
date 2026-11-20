@@ -1,0 +1,25 @@
+/* AVIAN-MORPH Cryptol spec — genomic coordinate transform (f32)
+ *
+ * Matches src/c11/CONTRACT_geom.md / avian_geom_transform_f32.
+ * out[3*i+r] = M[3*r+0]*in[3*i+0] + M[3*r+1]*in[3*i+1]
+ *            + M[3*r+2]*in[3*i+2] + t[r]
+ */
+
+module geom where
+
+type F32 = [32]
+
+affine_point : [9]F32 -> [3]F32 -> [3]F32 -> [3]F32
+affine_point M t xyz =
+  [ fma (M @ (3*r+2)) (xyz @ 2)
+      (fma (M @ (3*r+1)) (xyz @ 1)
+        (fma (M @ (3*r)) (xyz @ 0) (t @ r)))
+  | r <- [0, 1, 2] ]
+  where
+    fma a b c = (a * b) + c
+
+transform : {n} (fin n) => [9]F32 -> [3]F32 -> [n][3]F32 -> [n][3]F32
+transform M t pts = [ affine_point M t p | p <- pts ]
+
+property transform_len M t pts =
+  length (transform M t pts) == length pts

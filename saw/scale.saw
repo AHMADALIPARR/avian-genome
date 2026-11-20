@@ -1,0 +1,20 @@
+; AVIAN-MORPH SAW script — scale kernel equivalence
+; Target: LLVM bitcode from avian_scale.c against Cryptol scale.cry
+; Requires: SAW, clang producing bitcode, Cryptol.
+; Not run on this machine (toolchain missing).
+
+(import "cryptol/scale.cry")
+
+; Load LLVM bitcode produced from src/c11/avian_scale.c
+; (clang -emit-llvm -c avian_scale.c -o avian_scale.bc)
+(llvm_load_module "avian_scale.bc")
+
+; Prove avian_scale_f32 matches scale_f32 for finite inputs
+; (skeleton — expand once bitcode and SAW are available)
+(llvm_verify "avian_scale_f32"
+  (llvm_compose
+    (llvm_precond "finite_inputs")
+    (llvm_postcond "matches_cryptol_scale_f32"))
+  nil
+  (cryptol_load "scale" "scale_f32")
+  true)

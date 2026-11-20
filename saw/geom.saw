@@ -1,0 +1,15 @@
+; AVIAN-MORPH SAW script — geom transform equivalence
+; Target: LLVM bitcode from avian_geom.c against Cryptol geom.cry
+; Not run on this machine (toolchain missing).
+
+(import "cryptol/geom.cry")
+
+(llvm_load_module "avian_geom.bc")
+
+(llvm_verify "avian_geom_transform_f32"
+  (llvm_compose
+    (llvm_precond "finite_inputs_and_counts")
+    (llvm_postcond "matches_cryptol_transform"))
+  nil
+  (cryptol_load "geom" "transform")
+  true)

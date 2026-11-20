@@ -1,0 +1,27 @@
+/* AVIAN-MORPH Cryptol spec — scale kernel (f32 / i32)
+ *
+ * Bit-vector level contract matching src/c11/CONTRACT.md and
+ * avian_scale.c. Not executed here; toolchain not present.
+ */
+
+module scale where
+
+type F32 = [32]
+type I32 = [32]
+type I64 = [64]
+
+/* f32 scale: out[i] = in[i] * factor, all finite, no partial writes */
+scale_f32 : {n} (fin n) => F32 -> [n]F32 -> [n]F32
+scale_f32 factor xs = [ x * factor | x <- xs ]
+
+/* i32 scale: product formed in 64 bits, range-checked before narrow */
+scale_i32 : {n} (fin n) => I32 -> [n]I32 -> [n]I32
+scale_i32 factor xs =
+  [ if inRange p then (p : I32) else zero | x <- xs, p = (x : I64) * (factor : I64) ]
+  where
+    inRange : I64 -> Bit
+    inRange p = (p >= -0x80000000) && (p <= 0x7fffffff)
+
+/* Property: length preserved */
+property scale_f32_len factor xs = length (scale_f32 factor xs) == length xs
+property scale_i32_len factor xs = length (scale_i32 factor xs) == length xs
