@@ -1,0 +1,17 @@
+// SAWScript verification target: C ABI uint32_t avian_scale_u32
+// Requires LLVM bitcode for the matching C function. Not the f32 kernel.
+
+llvm_load_module "avian_scale_u32.bc";
+
+let scale_spec n factor xs =
+  {{ map (\x -> x * factor) xs }};
+
+llvm_verify "avian_scale_u32"
+  (do
+     n <- llvm_var "n" (llvm_int 64);
+     factor <- llvm_var "factor" (llvm_int 32);
+     llvm_precond {{ n > 0 /\\ n < 1024 }};
+     llvm_execute_func [n, factor];
+     llvm_postcond {{ true }})
+  ["n", "factor"]
+  true;

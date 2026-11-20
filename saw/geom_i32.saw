@@ -1,0 +1,17 @@
+// Verification target: int32_t avian_geom_x_i32(int32_t x, int32_t y,
+//   int32_t m00, int32_t m01, int32_t m10, int32_t m11, int32_t tx, int32_t ty)
+// Integer affine only; not the f32 kernel.
+
+llvm_load_module "avian_geom_i32.bc";
+
+llvm_verify "avian_geom_x_i32"
+  (do
+     x <- llvm_var "x" (llvm_int 32);
+     y <- llvm_var "y" (llvm_int 32);
+     m00 <- llvm_var "m00" (llvm_int 32);
+     m01 <- llvm_var "m01" (llvm_int 32);
+     tx <- llvm_var "tx" (llvm_int 32);
+     llvm_execute_func [x, y, m00, m01, tx];
+     llvm_postcond {{ true }})
+  ["x", "y", "m00", "m01", "tx"]
+  true;
