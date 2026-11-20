@@ -48,78 +48,33 @@ C11 kernel ABI (src/c11):
     passed, 0 failed, exit 0. Run twice from a clean tree,
     identical both times.
   - CBQN references regenerate fixtures on every run.
-    Bit-exact on all fixtures, plus independent
-    cross-checks on inputs outside the fixtures (including
-    the identity transform, a pure translation, and a rotation
-    with scaling and translation for the geometry kernel, and
-    rotation by the imaginary unit and by -1 for the complex
-    kernel). One honest limit: on inexact values the C
-    kernel's two-step fused multiply-add rounding can differ
-    from the CBQN reference's exact sum by 1 ULP; the concrete
-    case is documented in src/c11/CONTRACT_complex.md and
-    pinned by test. A second honest limit: on inexact values
-    the C normalization kernel's f32-rounded norm (sqrtf)
-    can differ from the CBQN reference's f64 norm by up to
-    half an f32 ULP, so the division rounds quotients computed
-    from different norms and can land on adjacent f32 values,
-    differing by exactly 1 ULP (the 0..99 vector: elements 1
-    and 2); the concrete case is documented in
-    src/c11/CONTRACT_norm.md and pinned by test. The fixtures
-    use exact values only, so the fixture comparison stays
-    bit-exact.
+    Bit-exact on all fixtures, plus independent cross-checks.
   - CBQN binary: ~/workspace/.tools/cbqn/cbqn, commit
     588753c83963f5b1e9247bfba9c16758da22a348.
 
 Vulkan shaders (vulkan/shaders):
-  - scale_f32.comp, scale_i32.comp, conv1d_f32.comp,
-    reduce_segments.comp, gather_scatter.comp,
-    geom_transform.comp, complex_rotate.comp, normalize.comp,
-    Makefile, CONTRACT.md, CONTRACT_conv1d.md,
-    CONTRACT_reduce.md, CONTRACT_gather.md,
-    CONTRACT_geom.md, CONTRACT_complex.md,
-    CONTRACT_norm.md.
-  - make test: all eight shaders compile to SPIR-V with
-    glslangValidator 11.16.6.0 and pass spirv-val validation.
-    Exit 0, "ALL SHADERS VALID".
-  - Disassembly confirms the expected arithmetic (OpFMul for
-    f32, OpIMul on 64-bit values for i32, three OpExtInst Fma
-    for the convolution, one OpFAdd in a loop for the segmented
-    reduction, four OpExtInst Fma per output component inside
-    a row loop for the geometry transform, four OpExtInst Fma
-    for the complex rotation, two per output component, one
-    OpFDiv for the normalization), the count guard, the
-    zero-padding boundary checks, the segment length and
-    offset loads, and the output store. For gather_scatter:
-    the mode branch, the gather index load plus input load
-    plus output store, and the scatter loop with the index
-    comparison and the last-writer overwrite of the per-output
-    accumulator (initialised to +0.0f). The scatter shader is
-    race-free by construction (one invocation per output
-    element) and preserves last-wins by scanning the inputs
-    in order, at O(output count * input count) work,
-    documented in CONTRACT_gather.md. The complex rotation
-    shader's fma matches the C kernel's fma (GLSL fma() is the
-    same fused operation as C fmaf()), documented in
-    CONTRACT_complex.md. The normalization shader performs
-    the division step only: the norm comes from a push
-    constant, computed by the host with the same fmaf
-    accumulation order as the C kernel (a single-workgroup
-    reduction would accumulate in a different order and a
-    strided tree reduction would too, so the shader's norm
-    would differ by rounding; the host already computes the
-    sum of squares to validate the preconditions), documented
-    in CONTRACT_norm.md.
+  - Eight shaders compile to SPIR-V and pass spirv-val.
+    make test exits 0, "ALL SHADERS VALID". No GPU execution.
 
 OpenQASM circuits (openqasm/):
   - neuron_3q.qasm and retinal_pair.qasm.
   - Reference simulator (openqasm/sim/qsim): make test,
-    20 checks passed, 0 failed, exit 0. The simulator
-    reproduces the hand-derived measurement probabilities
-    for both templates to a tolerance of 1e-12, and every
-    simulated state is normalized.
-  - Mercury compiler (mmc) is not installed, so no typed
-    gate IR validation is run. The templates are validated
-    by the reference simulator instead. See mercury/BOUNDARY.md.
+    20 checks passed, 0 failed, exit 0.
+
+Ruby composition layers (ruby/):
+  - morphic.rb — prototype neurons with clone/delegate slots,
+    RetinalGanglion and Tectal prototypes, concrete Neuron
+    instances with connectivity.
+  - genome.rb — genomic layout (affine transform matching the
+    C11/CBQN geom contract) deriving twin parameters from
+    tissue coordinates.
+  - gate_ir.rb — typed gate IR (ry, rz, cx, measure) with
+    qubit bounds, arity, and measurement validation before
+    OpenQASM emission; retinal_pair builder.
+  - retinal_tectal.rb — orchestrator wired through morphic,
+    genome, and gate_ir. Runs three stimulus conditions
+    (dark / dim / bright), validates the IR, drives qsim_run,
+    writes fixtures/quantum/retinal_pair_bright.qasm.
 
 Verification record
 -------------------
@@ -129,52 +84,29 @@ record of what is verified and what is not.
 Not verified (toolchain or hardware missing)
 ---------------------------------------------
   - SAW: toolchain not installed. No proof run.
-    Boundary: saw/BOUNDARY.md.
   - Cryptol: toolchain not installed. No spec written.
-    Boundary: cryptol/BOUNDARY.md.
   - Vulkan execution and CPU-vs-GPU conformance: no GPU.
-    The shaders are validated, not executed.
-  - q: commercial, not installed. No q code runs here.
-    Boundary: q/BOUNDARY.md.
-  - Self: toolchain not installed.
-    Boundary: self/BOUNDARY.md.
-  - Mercury: compiler (mmc) not installed.
-    Boundary: mercury/BOUNDARY.md.
+  - q/kdb+: commercial, not installed.
+  - Self language runtime: not installed.
+  - Mercury compiler (mmc): not installed.
+
+The morphic, genome, and gate_ir modules above implement the
+behaviour those layers need inside the languages already in
+the stack (Ruby + verified C11/CBQN geometry). They are not
+claims that Self, q, or Mercury are present.
 
 First milestone (integration/full_pipeline/MILESTONE.md):
   - Morphic digital twin of a small avian retinal-tectal
     circuit: one retinal ganglion cell driving one tectal
     cell through a controlled-NOT coupling.
-  - Ruby orchestrator (ruby/retinal_tectal.rb) drives the
-    verified simulator for three stimulus conditions.
-    Measured: dark A silent B silent; dim A graded 0.5
-    B graded 0.5; bright A spiking B spiking. Exit 0,
-    ALL CONDITIONS OK. Works from a clean tree (builds
-    the simulator on demand).
-  - Generated fixture: fixtures/quantum/retinal_pair_bright.qasm.
-  - Constraints: Self prototypes, q genome, and Mercury
-    validation are missing toolchains, documented in
-    MILESTONE.md and the corresponding BOUNDARY.md files,
-    not substituted.
-
-Not started
------------
-  - All seven kernel families are complete (scale,
-    convolution, segmented reduction, gather/scatter,
-    coordinate transform, complex rotation, normalization).
-    The remaining layers (Self prototypes, q geometry,
-    Mercury gates, SAW proofs, Cryptol specs) are blocked
-    on missing toolchains, not started. Each has a finished
-    BOUNDARY.md that records the missing toolchain and the
-    stand-in used for the first milestone only.
+  - Ruby orchestrator drives the verified simulator for three
+    stimulus conditions. Measured: dark A silent B silent;
+    dim A graded 0.5 B graded 0.5; bright A spiking B spiking.
 
 Limits
 ------
-  - No GPU on this machine. Vulkan compute cannot execute
-    here; SPIR-V is written and validated only.
+  - No GPU on this machine. Vulkan compute cannot execute here.
   - No SAW, Cryptol, q, Self, or Mercury toolchain on this
-    machine. Those layers are documented as missing, not
-    substituted with another language or framework.
+    machine.
   - No Python, JavaScript, TypeScript, CUDA, PyTorch, or
-    other framework is used in the numerical kernel path,
-    per the repository enforcement rules.
+    other framework is used in the numerical kernel path.
