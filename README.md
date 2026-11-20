@@ -39,7 +39,6 @@ AVIAN-MORPH has a front end. It is a Muse space, slug `avian-morph-genome`, and 
 
 The hero visualization draws the genome the way the data defines it. Four genome points are plotted from the geometry fixture, and selecting a point shows its input-to-output mapping. The retina feeds the retinal ganglion cell, neuron A. Neuron A drives the tectal neuron, neuron B, through the controlled-NOT coupling. The synapse is the retinal-to-tectal projection between them. The quantum circuit loop sits over the optic tectum and carries the CNOT mark that couples the two neurons.
 
-
 *The Bright stimulus state. The stimulus angle is pi, neuron A spikes at 1.0, neuron B spikes at 1.0, and the pathway between them is lit. The same page in the Dark state shows both neurons silent at 0.0, and in the Dim state both graded at 0.5.*
 
 The front end carries a stimulus switch with three conditions: Dark, Dim, and Bright. Switching the stimulus replays the simulator's own values. Dark sets the retinal input angle to 0 and both neurons read silent at 0.0. Dim sets the angle to pi/2 and both neurons read graded at 0.5. Bright sets the angle to pi and both neurons read spiking at 1.0. The neuron glow, the pathway lighting, and the probability bars all update to match. The genome parameters sit alongside: the phase angles are 0.0, and the second neuron's input angle is 0.0.
@@ -54,7 +53,7 @@ The architecture assigns one language to each layer, and no language substitutes
 
 **Ruby holds morphic composition and orchestration.** Neuron assemblies, metaprogramming, and developmental transformations live here. Ruby orchestrates the pipeline through defined interfaces. The retinal-tectal orchestrator, `ruby/retinal_tectal.rb`, is the working proof of this layer: it generates the OpenQASM circuits, drives the reference simulator, and reports the three stimulus conditions.
 
-**q holds genomic geometry.** Genomic coordinate maps, spatial indexing, adjacency tensors, and geometric transformations live here. q is commercial and is not installed on this machine, so no q code runs here. The genome stands in as a plain Ruby parameter hash for the milestone only, and the coordinate transform itself is implemented and verified in CBQN, C11, and Vulkan. The boundary is documented in `q/BOUNDARY.md`.
+**q holds genomic geometry.** Genomic coordinate maps, spatial indexing, adjacency tensors, and geometric transformations live here. q is commercial and is not installed on this machine, so no q code runs here. The genome stands in as a plain Ruby parameter hash for the milestone only, and the coordinate transform itself is implemented and verified in CBQN, C11, and Vulkan.
 
 **CBQN holds array algebra and kernel reference semantics.** Rank-polymorphic operations, reductions, scans, permutations, and tensor reference algorithms live here. CBQN is the reference oracle. Every C kernel is compared against a CBQN implementation, and CBQN regenerates the fixtures on every test run, so the comparison is always against a fresh oracle result.
 
@@ -75,22 +74,32 @@ No JavaScript, TypeScript, Python, React, PyTorch, NumPy, TensorFlow, or CUDA ap
 Seven kernel families make up the C11 layer. Each family carries its own header, its own implementation, its own test program, and its own numerical contract in `src/c11/`. Each family validates first and computes second, in the same check order: NULL, COUNT, OVERLAP, NONFINITE. A failed call writes nothing. There is no allocation anywhere in the kernels.
 
 ### Scale — 1055 checks
+
+`avian_scale.c`: f32 and i32 scale. f32 multiplies every element by one factor. i32 forms the product in 64 bits and range-checks before narrowing. 1055 checks, 0 failures. Vulkan: `scale_f32.comp`, `scale_i32.comp`.
+
 ### Receptive-field convolution — 1069 checks
+
+`avian_conv1d.c`: 1D 3-tap, zero padding, fma left to right. 1069 checks, 0 failures. Vulkan: `conv1d_f32.comp`.
+
 ### Segmented reduction — 71 checks
+
+`avian_reduce.c`: segmented sum, empty segment = +0.0f. 71 checks, 0 failures. Vulkan: `reduce_segments.comp`.
+
 ### Sparse gather and scatter — 1212 checks
+
+`avian_gather.c`: gather and scatter, last-wins, unwritten stays +0.0f. 1212 checks, 0 failures. Vulkan: `gather_scatter.comp`.
+
 ### Genomic coordinate transform — 407 checks
+
+`avian_geom.c`: 3D affine, 3x3 row-major + translation, fma accumulation. 407 checks, 0 failures. Vulkan: `geom_transform.comp`.
+
 ### Complex rotation — 300 checks
+
+`avian_complex.c`: complex multiply by a rotation given as a complex number, interleaved re/im, two-step fma. 300 checks, 0 failures. Vulkan: `complex_rotate.comp`.
+
 ### L2 normalization — 190 checks
 
-See `src/c11/CONTRACT*.md` for the full numerical contracts. CBQN regenerates fixtures on every test run; bit-exact on fixtures.
-
-## The invariant
-
-```
-K_CBQN(x) == K_C(x) == K_Vulkan(x)
-```
-
-CBQN vs C is verified by execution (4304 checks, 0 failures). Vulkan is validated as SPIR-V (8 shaders); GPU execution awaits hardware.
+`avian_norm.c`: unit vector, fmaf sum of squares, sqrtf, divide. Zero norm returns error. 190 checks, 0 failures. Vulkan: `normalize.comp`.
 
 ## How to run
 
