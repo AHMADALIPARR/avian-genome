@@ -1,0 +1,53 @@
+// Bit-vector, modular arithmetic contracts for seven kernel families.
+// These are bit-exact integer/fixed-point reference functions; floating-point
+// kernels require a separate IEEE-754 specification and rounding contract.
+module AvianKernels where
+
+scale : {n, w} (fin n, fin w) => [n][w] -> [w] -> [n][w]
+scale xs factor = [ x * factor | x <- xs ]
+
+conv1d : {n, w} (fin n, fin w) => [n][w] -> [3][w] -> [n][w]
+conv1d xs taps = [
+    (if i == 0 then 0 else xs @ (i - 1) * taps @ 0) +
+    xs @ i * taps @ 1 +
+    (if i + 1 >= n then 0 else xs @ (i + 1) * taps @ 2)
+  | i <- [0 .. n - 1] ]
+
+reduceSum : {n, w} (fin n, fin w) => [n][w] -> [w]
+reduceSum xs = foldl (+) 0 xs
+
+gather : {n, m, w, ix} (fin n, fin m, fin w, fin ix) => [n][w] -> [m][ix] -> [m][w]
+gather xs indices = [ xs @ (toInteger i % n) | i <- indices ]
+
+scatterAdd : {n, m, w, ix} (fin n, fin m, fin w, fin ix) => [n][w] -> [m][ix] -> [m][w] -> [n][w]
+scatterAdd xs indices values = [
+    xs @ j + foldl (+) 0 [ if toInteger (indices @ k) == j then values @ k else 0
+                            | k <- [0 .. m - 1] ]
+    | j <- [0 .. n - 1] ]
+
+// Signed coordinates represented in two's-complement integer units.
+geomAffine2 : {w} (fin w) => [4][w] -> [2][w] -> [2][w] -> [2][w]
+geomAffine2 matrix offset xy = [
+    matrix @ 0 * xy @ 0 + matrix @ 1 * xy @ 1 + offset @ 0,
+    matrix @ 2 * xy @ 0 + matrix @ 3 * xy @ 1 + offset @ 1 ]
+
+// A + iB times C + iD over modular fixed-width integers.
+complexMul : {w} (fin w) => [2][w] -> [2][w] -> [2][w]
+complexMul x y = [ x @ 0 * y @ 0 - x @ 1 * y @ 1,
+                   x @ 0 * y @ 1 + x @ 1 * y @ 0 ]
+
+// Integer squared L2 norm, no root; widening must be explicit for real kernels.
+normSquared : {n, w} (fin n, fin w) => [n][w] -> [w]
+normSquared xs = foldl (+) 0 [x * x | x <- xs]
+
+property_scale_identity : [8][32] -> Bit
+property_scale_identity xs = scale xs 1 == xs
+
+property_geom_identity : [2][32] -> Bit
+property_geom_identity xy = geomAffine2 [1, 0, 0, 1] [0, 0] xy == xy
+
+property_complex_one : [2][32] -> Bit
+property_complex_one z = complexMul z [1, 0] == z
+
+property_scatter_zero : [8][32] -> [4][3] -> Bit
+property_scatter_zero xs idx = scatterAdd xs idx [0, 0, 0, 0] == xs
