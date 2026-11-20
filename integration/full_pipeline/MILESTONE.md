@@ -57,19 +57,23 @@ Constraints (what is substituted and what is missing)
     not Self prototypes. Self is the intended representation
     for morphic prototypes; the Ruby objects are a stand-in
     for the orchestration layer only.
+    Boundary: self/BOUNDARY.md.
   - q genome: q/kdb+ is commercial and not installed here.
     The genome is a plain parameter hash in the orchestrator,
     not a q program. The genomic geometry (coordinate maps,
     spatial indexing, adjacency tensors) is not computed by
     q here.
+    Boundary: q/BOUNDARY.md.
   - Mercury validation: the Mercury compiler (mmc) is not
     installed here. No typed gate IR validation is run. The
     templates are validated by the reference simulator.
+    Boundary: mercury/BOUNDARY.md.
   - Vulkan geometry: the scale shaders are built and
     validated (vulkan/shaders), but no geometry shader for
     this circuit is written yet, and no GPU is present to
     run one. The twin's geometry is the circuit layout,
     not a rendered field.
 
-None of these is silently substituted. Each is recorded here
-and in verification/VERIFICATION_STATUS.md.
+None of these is silently substituted. Each is recorded here,
+in the corresponding BOUNDARY.md, and in
+verification/VERIFICATION_STATUS.md.

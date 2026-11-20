@@ -119,7 +119,7 @@ OpenQASM circuits (openqasm/):
     simulated state is normalized.
   - Mercury compiler (mmc) is not installed, so no typed
     gate IR validation is run. The templates are validated
-    by the reference simulator instead.
+    by the reference simulator instead. See mercury/BOUNDARY.md.
 
 Verification record
 -------------------
@@ -129,12 +129,17 @@ record of what is verified and what is not.
 Not verified (toolchain or hardware missing)
 ---------------------------------------------
   - SAW: toolchain not installed. No proof run.
+    Boundary: saw/BOUNDARY.md.
   - Cryptol: toolchain not installed. No spec written.
+    Boundary: cryptol/BOUNDARY.md.
   - Vulkan execution and CPU-vs-GPU conformance: no GPU.
     The shaders are validated, not executed.
   - q: commercial, not installed. No q code runs here.
+    Boundary: q/BOUNDARY.md.
   - Self: toolchain not installed.
+    Boundary: self/BOUNDARY.md.
   - Mercury: compiler (mmc) not installed.
+    Boundary: mercury/BOUNDARY.md.
 
 First milestone (integration/full_pipeline/MILESTONE.md):
   - Morphic digital twin of a small avian retinal-tectal
@@ -149,7 +154,8 @@ First milestone (integration/full_pipeline/MILESTONE.md):
   - Generated fixture: fixtures/quantum/retinal_pair_bright.qasm.
   - Constraints: Self prototypes, q genome, and Mercury
     validation are missing toolchains, documented in
-    MILESTONE.md, not substituted.
+    MILESTONE.md and the corresponding BOUNDARY.md files,
+    not substituted.
 
 Not started
 -----------
@@ -158,7 +164,9 @@ Not started
     coordinate transform, complex rotation, normalization).
     The remaining layers (Self prototypes, q geometry,
     Mercury gates, SAW proofs, Cryptol specs) are blocked
-    on missing toolchains, not started.
+    on missing toolchains, not started. Each has a finished
+    BOUNDARY.md that records the missing toolchain and the
+    stand-in used for the first milestone only.
 
 Limits
 ------

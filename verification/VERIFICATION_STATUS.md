@@ -173,8 +173,8 @@ First milestone (morphic digital twin, retinal-tectal):
     Works from a clean tree.
   - The twin's Self prototypes, q genome, and Mercury
     validation are NOT built (toolchains missing). Those
-    are documented in integration/full_pipeline/MILESTONE.md,
-    not substituted.
+    are documented in integration/full_pipeline/MILESTONE.md
+    and in the layer BOUNDARY.md files, not substituted.
 
 UNVERIFIED (with the reason)
 ----------------------------
@@ -182,11 +182,13 @@ SAW verification:
   - NOT RUN. The SAW toolchain is not installed on this VM.
   - No SAWScript, no proof log, no equivalence result exists
     for any kernel. Status: UNVERIFIED (toolchain missing).
+  - Boundary: saw/BOUNDARY.md.
 
 Cryptol specifications:
   - NOT WRITTEN. The Cryptol toolchain is not installed on
     this VM. No Cryptol spec exists for any kernel.
     Status: UNVERIFIED (toolchain missing).
+  - Boundary: cryptol/BOUNDARY.md.
 
 Vulkan execution and CPU-vs-GPU conformance:
   - NOT RUN. There is no GPU on this VM. No shader is executed
@@ -202,10 +204,12 @@ q geometry layer:
   - NOT BUILT. q/kdb+ is commercial and is not installed on
     this VM. No q code is executed here.
     Status: UNVERIFIED (toolchain missing, commercial).
+  - Boundary: q/BOUNDARY.md.
 
 Self morphic objects:
   - NOT BUILT. The Self toolchain is not installed on this VM.
     Status: UNVERIFIED (toolchain missing).
+  - Boundary: self/BOUNDARY.md.
 
 OpenQASM circuits:
   - WRITTEN and VERIFIED by the reference simulator.
@@ -227,6 +231,7 @@ Mercury quantum gates:
     this VM. Status: UNVERIFIED (toolchain missing). The
     OpenQASM templates are validated by the reference
     simulator instead; no Mercury check is claimed.
+  - Boundary: mercury/BOUNDARY.md.
 
 Ruby orchestration:
   - BUILT and VERIFIED by execution. ruby/retinal_tectal.rb
@@ -238,3 +243,6 @@ Rule
 A status changes from UNVERIFIED to VERIFIED only when a tool
 on a real machine produces the result. A missing toolchain is
 recorded as a missing toolchain, never silently substituted.
+Each missing layer has a finished BOUNDARY.md that states what
+the layer is, why it is absent, what (if anything) stands in
+for the first milestone only, and what would unblock it.
